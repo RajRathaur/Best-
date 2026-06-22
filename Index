@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TRENDRA SHOPKART – Online Shopping for Mobiles, Fashion, Electronics & More</title>
+<script src="https://www.gstatic.com/firebasejs/12.3.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore-compat.js"></script>
+<script type="module" id="trendra-ai-module">
+  import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+  import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-ai.js";
+  import {
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink,
+    updateProfile, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
+
+  window.__trendraAIReady = (async function(){
+    try{
+      const cfg = {
+        apiKey: "AIzaSyDsAc5vD41hb3ikubmFENRpLcvbn9OGrCQ",
+        authDomain: "trendra-1890a.firebaseapp.com",
+        projectId: "trendra-1890a",
+        storageBucket: "trendra-1890a.firebasestorage.app",
+        messagingSenderId: "678660854722",
+        appId: "1:678660854722:web:652af74c5fce21b0a73c5b",
+        measurementId: "G-DRG5YH7DNR"
+      };
+      const modularApp = getApps().length ? getApps()[0] : initializeApp(cfg);
+      const ai = getAI(modularApp, { backend: new GoogleAIBackend() });
+      const auth = getAuth(modularApp);
+
+      window.__trendraAskGemini = async function(systemPrompt, history){
+        const model = getGenerativeModel(ai, {
+          model: "gemini-3.5-flash",
+          generationConfig: { responseMimeType: "application/json" },
+          systemInstruction: { role: "system", parts: [{ text: systemPrompt }] }
+        });
+        const contents = history.map(h=>({role:h.role, parts:[{text:h.text}]}));
+        const result = await model.generateContent({ contents });
+        return result.response.text();
+      };
+
+      window.__trendraAuth = {
+        async signUp(email, password, name){
+          const cred = await createUserWithEmailAndPassword(auth, email, password);
+          if(name) await updateProfile(cred.user, { displayName: name });
+          return { uid: cred.user.uid, email: cred.user.email, name: name || email.split('@')[0] };
+        },
+        async signIn(email, password){
+          const cred = await signInWithEmailAndPassword(auth, email, password);
+          return { uid: cred.user.uid, email: cred.user.email, name: cred.user.displayName || email.split('@')[0] };
+        },
+        async sendEmailOtp(email){
+          const actionCodeSettings = {
+            url: window.location.href.split('#')[0].split('?')[0],
+            handleCodeInApp: true
+          };
+          await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+          window.localStorage.setItem('trendraEmailForSignIn', email);
+        },
+        async completeEmailOtpIfPresent(){
+          if(!isSignInWithEmailLink(auth, window.location.href)) return null;
+          let email = window.localStorage.getItem('trendraEmailForSignIn');
+          if(!email){
+            email = window.prompt('Confirm your email to complete sign-in:');
+          }
+          if(!email) return null;
+          const cred = await signInWithEmailLink(auth, email, window.location.href);
+          window.localStorage.removeItem('trendraEmailForSignIn');
+          window.history.replaceState({}, document.title, window.location.pathname);
+          return { uid: cred.user.uid, email: cred.user.email, name: cred.user.displayName || email.split('@')[0] };
+        }
+      };
+
+      return true;
+    }catch(err){
+      console.error("Trendra AI (Gemini) failed to initialize:", err);
+      window.__trendraAskGemini = null;
+      return false;
+    }
+  })();
+</script>
+
+<link rel="stylesheet" href="style.css">
+
+</head>
+<body>
+
+<div class="offer-strip">
+  <span>🚀 Free delivery on orders above ₹500</span>
+  <span>⚡ New user offer: Extra 10% off</span>
+  <span>📧 Contact us: trendra.care.ac.in@gmail.com</span>
+  <span>🎁 Spin & Win instant coupons</span>
+</div>
+
+<header class="hdr">
+  <div class="hdr-top">
+    <div class="logo" onclick="goHome()">TRENDRA <sub>SHOPKART</sub></div>
+    <div class="hdr-search">
+      <input type="text" id="searchQ" placeholder="Search for products, brands and more">
+      <button onclick="doSearch()">🔍</button>
+    </div>
+    <div class="hdr-nav">
+      <div id="hdrUserArea">
+        <button class="hdr-btn" onclick="openM('loginModal')">Login</button>
+      </div>
+      <div class="hdr-link" onclick="openSellerPage()" style="background:rgba(255,255,255,.1);padding:6px 14px;border-radius:20px;">🏪 Become a Seller</div>
+      <div class="hdr-link" onclick="openM('baristaModal');initBarista()" style="background:rgba(255,255,255,.1);padding:6px 14px;border-radius:20px;">🤖 Trendra AI</div>
+      <div class="hdr-link" onclick="openM('settingsModal')">⚙️</div>
+      <div class="hdr-link" onclick="toggleNotif()">🔔<span class="badge" id="notifBadge">3</span></div>
+      <div class="hdr-link" onclick="openM('wishModal');renderWishModal()">❤️<span class="badge" id="wishBadge">0</span></div>
+      <div class="hdr-link" onclick="openCart()">🛒 Cart<span class="badge" id="cartBadge">0</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="notif-panel" id="notifPanel">
+  <div class="notif-hdr"><span>Notifications</span><button onclick="closeNotif()" style="background:none;font-size:18px;">✕</button></div>
+  <div class="notif-item unread"><div class="notif-dot"></div><div><b>Order Shipped!</b><br>Your order #TS2024001 is on the way.</div></div>
+  <div class="notif-item unread"><div class="notif-dot"></div><div><b>Coupon Earned!</b><br>You won SPIN20 – 20% off coupon.</div></div>
+  <div class="notif-item unread"><div class="notif-dot"></div><div><b>Flash Sale!</b><br>Electronics up to 60% off. Hurry!</div></div>
+  <div class="notif-item"><div class="notif-dot" style="background:#ccc;"></div><div><b>Delivery Done</b><br>Your order was delivered successfully.</div></div>
+</div>
+
+<div class="profile-drop" id="profileDrop">
+  <div class="pd-user">
+    <div class="hdr-avatar" id="pdAvatar">A</div>
+    <div><b id="pdName">User</b><br><span style="font-size:11px;color:var(--muted);" id="pdEmail">user@email.com</span></div>
+  </div>
+  <a onclick="openM('ordersModal');renderOrdersModal()">📦 My Orders</a>
+  <a onclick="openM('wishModal');renderWishModal()">❤️ Wishlist</a>
+  <a onclick="openM('loginModal')">⚙️ Account Settings</a>
+  <a id="adminPanelLink" style="display:none;" onclick="openAdmin()">🔧 Admin Panel</a>
+  <a onclick="doLogout()" style="color:var(--red);">🚪 Logout</a>
+</div>
+
+<nav class="cat-nav">
+  <div class="cat-nav-inner">
+    <div class="cat-item" onclick="scrollSec('deals')"><span class="ci">🔥</span>Today's Deals</div>
+    <div class="cat-item" onclick="scrollSec('mobiles')"><span class="ci">📱</span>Mobiles</div>
+    <div class="cat-item" onclick="scrollSec('tvs')"><span class="ci">📺</span>TVs</div>
+    <div class="cat-item" onclick="scrollSec('electronics')"><span class="ci">💻</span>Electronics</div>
+    <div class="cat-item" onclick="scrollSec('fashion')"><span class="ci">👕</span>Fashion</div>
+    <div class="cat-item" onclick="scrollSec('appliances')"><span class="ci">🔌</span>Appliances</div>
+    <div class="cat-item" onclick="scrollSec('furniture')"><span class="ci">🛋️</span>Furniture</div>
+    <div class="cat-item" onclick="scrollSec('toysbooks')"><span class="ci">🧸</span>Toys & Books</div>
+    <div class="cat-item" onclick="scrollSec('grocery')"><span class="ci">🛒</span>Grocery</div>
+    <div class="cat-item" onclick="openM('baristaModal');initBarista()"><span class="ci">🤖</span>Trendra AI</div>
+    <div class="cat-item" onclick="openM('spinModal')"><span class="ci">🎯</span>Spin & Win</div>
+  </div>
+</nav>
+
+<main>
+<div class="wrap" style="margin-top:10px;">
+  <div class="hero-area">
+    <div class="hero-left">
+      <div class="side-cat">📱 Mobiles</div><div class="side-cat">💻 Laptops</div>
+      <div class="side-cat">📺 TVs & ACs</div><div class="side-cat">👗 Fashion</div>
+      <div class="side-cat">🏠 Home Decor</div><div class="side-cat">🍳 Kitchen</div>
+      <div class="side-cat">🧸 Toys</div><div class="side-cat">📚 Books</div>
+      <div class="side-cat">💄 Beauty</div><div class="side-cat">🏋️ Sports</div>
+    </div>
+    <div class="hero-banner" id="heroBanner">
+      <div class="hero-slide active" style="background:linear-gradient(135deg,#2874f0,#0d47a1);"><div><h1>Mega Sale Days</h1><p>Up to 70% off across all categories</p><span class="hbtn">Shop Now →</span></div></div>
+      <div class="hero-slide" style="background:linear-gradient(135deg,#e91e63,#880e4f);"><div><h1>Fashion Fiesta</h1><p>Trending styles for men & women from ₹399</p><span class="hbtn">Explore Now →</span></div></div>
+      <div class="hero-slide" style="background:linear-gradient(135deg,#ff6f00,#e65100);"><div><h1>Appliance Fest</h1><p>Best deals on TVs, ACs, Washing Machines</p><span class="hbtn">View Offers →</span></div></div>
+      <div class="hero-slide" style="background:linear-gradient(135deg,#1b5e20,#388e3c);"><div><h1>Electronics Bonanza</h1><p>Laptops, Earbuds, Cameras & Smart Devices</p><span class="hbtn">Grab Deals →</span></div></div>
+      <div class="hero-slide" style="background:linear-gradient(135deg,#4a148c,#7b1fa2);"><div><h1>Spin & Win!</h1><p>Get instant coupons — one free spin per visit</p><span class="hbtn" onclick="openM('spinModal')">Play Now 🎯</span></div></div>
+      <div class="hero-dots" id="heroDots"></div>
+      <div class="hero-arr prev" onclick="heroSlide(-1)">&#8249;</div>
+      <div class="hero-arr next" onclick="heroSlide(1)">&#8250;</div>
+    </div>
+    <div class="hero-right">
+      <div class="side-cat">🎁 Gift Cards</div><div class="side-cat">💊 Healthcare</div>
+      <div class="side-cat">🚗 Automotive</div><div class="side-cat">🐾 Pet Supplies</div>
+      <div class="side-cat">📷 Cameras</div><div class="side-cat">🎮 Gaming</div>
+      <div class="side-cat">🌿 Organic</div><div class="side-cat">🎨 Art & Craft</div>
+      <div class="side-cat">🧴 Personal Care</div><div class="side-cat">💼 Luggage</div>
+    </div>
+  </div>
+
+  <div class="filter-bar" id="filterBar">
+    <label>Sort</label>
+    <select class="filter-select" id="sortSelect" onchange="applyFilters()">
+      <option value="relevance">Relevance</option>
+      <option value="price_low">Price: Low to High</option>
+      <option value="price_high">Price: High to Low</option>
+      <option value="rating">Rating: High to Low</option>
+      <option value="newest">Newest First</option>
+    </select>
+    <label>Price</label>
+    <div class="filter-group">
+      <input type="number" class="filter-price" id="priceMin" placeholder="Min" onchange="applyFilters()">
+      <span style="color:var(--muted);">–</span>
+      <input type="number" class="filter-price" id="priceMax" placeholder="Max" onchange="applyFilters()">
+    </div>
+    <label>Brand</label>
+    <select class="filter-select" id="brandSelect" onchange="applyFilters()">
+      <option value="">All Brands</option>
+    </select>
+    <div class="filter-group">
+      <span class="filter-chip" data-rating="4" onclick="toggleRatingChip(this)">4★ & up</span>
+      <span class="filter-chip" data-rating="3" onclick="toggleRatingChip(this)">3★ & up</span>
+    </div>
+    <span class="filter-clear" onclick="clearFilters()">Clear Filters ✕</span>
+  </div>
+
+  <div id="searchSec" style="display:none;">
+    <div class="sec" style="padding:16px;">
+      <div class="sec-hdr"><div><h2>Search Results</h2><div class="sub" id="searchSub"></div></div><button class="sec-hdr view-all" onclick="clearSearch()">Clear ✕</button></div>
+      <div class="prod-grid" id="srGrid"></div>
+    </div>
+  </div>
+
+  <div id="pdpSec" style="display:none;"></div>
+
+  <div id="homeSec">
+    <div class="sec" id="deals">
+      <div class="sec-hdr">
+        <div><h2>⚡ Deals of the Day</h2><div class="sub">Limited time offers — grab fast!</div></div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="sec-hdr timer">Ends in <b id="countdownTime">--:--:--</b></div>
+          <button class="sec-hdr view-all">View All</button>
+        </div>
+      </div>
+      <div class="deal-strip" id="dealStrip"></div>
+    </div>
+    <div class="sec" id="mobiles" style="margin-top:10px;">
+      <div class="sec-hdr"><div><h2>📱 Top Mobiles</h2><div class="sub">Latest smartphones from trusted brands</div></div><button class="sec-hdr view-all">View All</button></div>
+      <div class="prod-scroll" id="s-mobiles"></div>
+    </div>
+    <div class="banner-strip">
+      <div class="mini-banner" style="background:linear-gradient(135deg,#2874f0,#1a237e);" onclick="scrollSec('electronics')"><h3>Best Laptops</h3><p>Work & play smarter</p><span>From ₹32,999</span></div>
+      <div class="mini-banner" style="background:linear-gradient(135deg,#e91e63,#880e4f);" onclick="scrollSec('fashion')"><h3>Fashion Sale</h3><p>Up to 80% off</p><span>Shop Now</span></div>
+      <div class="mini-banner" style="background:linear-gradient(135deg,#ff6f00,#bf360c);" onclick="scrollSec('appliances')"><h3>Home Appliances</h3><p>Great deals inside</p><span>Up to 50% off</span></div>
+      <div class="mini-banner" style="background:linear-gradient(135deg,#00695c,#1b5e20);" onclick="openM('spinModal')"><h3>Spin & Win</h3><p>Instant coupons!</p><span>Play Free 🎯</span></div>
+    </div>
+    <div class="sec" id="tvs" style="margin-top:10px;">
+      <div class="sec-hdr"><div><h2>📺 Smart TVs</h2><div class="sub">4K, OLED & more</div></div><button class="sec-hdr view-all">View All</button></div>
+      <div class="prod-scroll" id="s-tvs"></div>
+    </div>
+    <div class="sec" id="electronics" style="margin-top:10px;">
+      <div class="sec-hdr"><div><h2>💻 Electronics</h2><div class="sub">Laptops, earbuds, smart devices</div></div><button class="sec-hdr view-all">View All</button></div>
+      <div class="prod-scroll" id="s-electronics"></div>
+    </div>
+    <div class="sec" id="fashion" style="margin-top:10px;">
+      <div class="sec-hdr"><div><h2>👕 Fashion Trends</h2><div class="sub">Styles for men, women & kids</div></div><button class="sec-hdr view-all">View All</button></div>
+      <div class="prod-scroll" id="s-fashion"></div>
+    </div>
+    <div class="sec" id="appliances" style="margin-top:10px;">
+      <div class="sec-hdr"><div><h2>🔌 Home Appliances</h2><div class="sub">ACs, fridges, washing machines & more</div></div><button class="sec-hdr view-all">View All</button></div>
+      <div class="prod-scroll" id="s-appliances"></div>
+    </div>
+    <div class="sec" id="furniture" style="margin-top:10px;">
+      <div class="sec-hdr"><div><h2>🛋️ Furniture & Home</h2><div class="sub">Decor, kitchen & living</div></div><button class="sec-hdr view-all">View All</button></div>
+      <div class="prod-scroll" id="s-furniture"></div>
+    </div>
+    <div class="sec" id="toysbooks" style="margin-top:10px;">
+      <div class="sec-hdr"><div><h2>🧸 Toys & Books</h2><div class="sub">For curious minds</div></div><button class="sec-hdr view-all">View All</button></div>
+      <div class="prod-scroll" id="s-toysbooks"></div>
+    </div>
+    <div class="sec" id="grocery" style="margin-top:10px;">
+      <div class="sec-hdr"><div><h2>🛒 Grocery & Sports</h2><div class="sub">Daily needs & fitness gear</div></div><button class="sec-hdr view-all">View All</button></div>
+      <div class="prod-scroll" id="s-grocery"></div>
+    </div>
+    <div class="feature-row" style="margin-top:10px;">
+      <div class="fbox"><div class="fi">🚚</div><h4>Free Delivery</h4><p>On orders above ₹500. Fast & reliable.</p></div>
+      <div class="fbox"><div class="fi">↩️</div><h4>Easy Returns</h4><p>7-day hassle-free return policy.</p></div>
+      <div class="fbox"><div class="fi">🔒</div><h4>Secure Payments</h4><p>100% safe UPI, Card & Net Banking.</p></div>
+      <div class="fbox"><div class="fi">🏆</div><h4>Top Brands</h4><p>Millions of authentic products.</p></div>
+      <div class="fbox"><div class="fi">💬</div><h4>24/7 Support</h4><p>Always here to help you out.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="trust-bar">
+  <div class="trust-inner">
+    <div class="trust-item"><div class="trust-icon">📦</div><div class="trust-info"><b>5 Crore+ Products</b><span>Across all categories</span></div></div>
+    <div class="trust-item"><div class="trust-icon">🚀</div><div class="trust-info"><b>Express Delivery</b><span>In select cities</span></div></div>
+    <div class="trust-item"><div class="trust-icon">💳</div><div class="trust-info"><b>EMI Available</b><span>No-cost EMI on select items</span></div></div>
+    <div class="trust-item"><div class="trust-icon">✅</div><div class="trust-info"><b>100% Authentic</b><span>Only genuine products</span></div></div>
+    <div class="trust-item"><div class="trust-icon">🎁</div><div class="trust-info"><b>Gift Cards</b><span>For your loved ones</span></div></div>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="footer-top">
+    <div class="footer-col"><h5>About</h5><a>About TRENDRA SHOPKART</a><a>Careers</a><a>Press</a><a>Blog</a><a onclick="openSellerPage()">Become a Seller</a><a>Corporate Info</a></div>
+    <div class="footer-col"><h5>Help</h5><a>Payments</a><a>Shipping</a><a>Cancellation & Returns</a><a>FAQ</a><a>Report Infringement</a></div>
+    <div class="footer-col"><h5>Policy</h5><a>Return Policy</a><a>Terms of Use</a><a>Privacy</a><a>Sitemap</a><a>Cookie Policy</a></div>
+    <div class="footer-col"><h5>Social</h5><a>Facebook</a><a>Twitter / X</a><a>Instagram</a><a>YouTube</a></div>
+    <div class="footer-col"><h5>Mail Us</h5><p style="font-size:12px;line-height:1.8;">TRENDRA SHOPKART Internet Pvt Ltd,<br>Buildings Alyssa, Prayagraj,<br>Uttar Pradesh - 211001</p></div>
+    <div class="footer-col"><h5>Contact</h5><div style="background:rgba(255,255,255,.08);border-radius:5px;padding:12px;font-size:12px;"><div style="margin-bottom:6px;">Email:</div><div class="upi" style="font-size:13px;">trendra.care.ac.in@gmail.com</div><div style="margin-top:8px;color:#6b8a9a;">We reply within 24 hours</div></div></div>
+  </div>
+  <div class="footer-bottom">© 2026 TRENDRA SHOPKART Internet Pvt. Ltd. All rights reserved. | CIN: U51109KA2024PTC001001</div>
+</footer>
+</main>
+
+<div class="overlay" id="overlay" onclick="closeAll()"></div>
+
+<aside class="cart-side" id="cartSide">
+  <div class="cart-hdr"><span>🛒 My Cart</span><button onclick="closeCart()">✕</button></div>
+  <div class="cart-body" id="cartBody"></div>
+  <div class="cart-foot" id="cartFoot"></div>
+</aside>
+
+<div class="modal login-modal" id="loginModal">
+  <button class="mclose" onclick="closeM('loginModal')">✕</button>
+  <h2 id="loginTitle">Login</h2>
+  <p class="lsub">Get access to your orders, wishlist & recommendations</p>
+  <div class="l-tabs"><button class="act" id="tLogin" onclick="lTab('login')">Login</button><button id="tSignup" onclick="lTab('signup')">Sign Up</button></div>
+
+  <div id="loginFields">
+    <div class="lfield"><label>Email Address</label><input type="email" id="lemail" placeholder="Enter your email"></div>
+    <div class="lfield"><label>Password</label><input type="password" id="lpass" placeholder="Enter password"></div>
+    <button class="l-submit" id="lBtn" onclick="doLogin()">LOGIN</button>
+  </div>
+
+  <div id="signupFields" style="display:none;">
+    <div class="lfield"><label>Full Name</label><input type="text" id="sname" placeholder="Your full name"></div>
+    <div class="lfield"><label>Email Address</label><input type="email" id="semail" placeholder="Enter your email"></div>
+    <div class="lfield"><label>Password</label><input type="password" id="spass" placeholder="Create a password (min 6 chars)"></div>
+    <div class="lfield">
+      <label>Veri
